@@ -49,6 +49,22 @@
 #define SHA256_F3(x) (ROTR(x,  7) ^ ROTR(x, 18) ^ SHFR(x,  3))
 #define SHA256_F4(x) (ROTR(x, 17) ^ ROTR(x, 19) ^ SHFR(x, 10))
 
+#define UNPACK32(x, str)                      \
+{                                             \
+    *((str) + 3) = (uint8_t) ((x)      );       \
+    *((str) + 2) = (uint8_t) ((x) >>  8);       \
+    *((str) + 1) = (uint8_t) ((x) >> 16);       \
+    *((str) + 0) = (uint8_t) ((x) >> 24);       \
+}
+
+#define PACK32(str, x)                        \
+{                                             \
+    *(x) =   ((uint32_t) *((str) + 3)      )    \
+           | ((uint32_t) *((str) + 2) <<  8)    \
+           | ((uint32_t) *((str) + 1) << 16)    \
+           | ((uint32_t) *((str) + 0) << 24);   \
+}
+
 typedef struct {
     unsigned int tot_len;
     unsigned int len;
@@ -58,6 +74,8 @@ typedef struct {
 
 extern uint32_t sha256_k[64];
 
-void sha256_loc(const unsigned char *buf, unsigned int *per_a, unsigned int *per_b);
-void sha256_loc1(const unsigned char *buf, unsigned int *per_a, unsigned int *per_b);
+void sha256_init(sha256_ctx *ctx, uint32_t *h);
+void sha256_update(sha256_ctx *ctx, const unsigned char *message,
+                   unsigned int len);
+void sha256_final(sha256_ctx *ctx, unsigned char *digest);
 #endif /* !SHA2_H */

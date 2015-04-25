@@ -1,11 +1,18 @@
-all: sha2.o main.o
-	gcc -g -O0 sha2.o main.o -o test
+TARGET = midstate
+
+SRCS = main.c sha2.c
+OBJS = $(patsubst %.c,%.o,$(SRCS))
+
+CFLAGS = -g -O0 -Wall
+
+all: $(OBJS)
+	gcc $(OBJS) -o $(TARGET)
 
 sha2.o:sha2.c
-	gcc -c -g -O0 $< -o $@
+	gcc -c $(CFLAGS) $< -o $@
 
 main.o:main.c
-	gcc -c -g -O0 $< -o $@
+	gcc -c $(CFLAGS) $< -o $@
 
 clean:
-	rm *.o test
+	@rm -f $(OBJS) $(TARGET)

@@ -1,4 +1,35 @@
+/*
+ * Bitcoin midstate demo
+ * shame with some code from cgminer.
+ * Copyright (C) 2015 Mikeqin <Fengling.Qin@gmail.com>
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the project nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE PROJECT AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE PROJECT OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ */
 #include <stdio.h>
+#include <string.h>
 #include "sha2.h"
 
 static const int hex2bin_tbl[256] = {
@@ -52,17 +83,48 @@ static unsigned char hex2bin(unsigned char *p, const unsigned char *hexstr, unsi
 
 int main(void)
 {
-	unsigned char strbuf[] = "8d9f82b9d78aac6267cbfef515722ea1450033ef9edd863e10fe7ae05e2b4662d22dfc5955372b8b181717f0";
-	uint8_t buf[44];
-	unsigned int per_a[3], per_b[3];
+	/* header
+	 * 00000003b968b96fd5c2e94facad8296e7e8a9a87fa565810108fb760000000000000000cb59ccf140d92666713f71b56cd2702b60383c8e9f9685e8fd6fa7f8
+	 * d22dfc5955372b8b181717f000000000000000800000000000000000000000000000000000000000000000000000000000000000000000000000000080020000
+	 *
+	 * icarus format : midstate (32 bytes) + reserved (20 bytes) + data (12 bytes)
+	 * 62462b5ee07afe103e86dd9eef330045a12e7215f5fecb6762ac8ad7b9829f8d0000000000000000000000000000000000000000f01717188b2b375559fc2dd2
+	 * nonce: 5e2199c8
+	 */
+	unsigned char strbuf[] = "030000006fb968b94fe9c2d59682adaca8a9e8e78165a57f76fb08010000000000000000f1cc59cb6626d940b5713f712b70d26c8e3c3860e885969ff8a76ffd";
+	uint8_t buf[64], i;
+	sha256_ctx ctx, ctx1;
+	unsigned char digest[32];
 
-	hex2bin(buf, strbuf, 44);
-	sha256_loc(buf, per_a, per_b);
-	printf("sha256_loc:\n");
-	printf("%08x-%08x-%08x\n", per_a[0], per_a[1], per_a[2]);
-	printf("%08x-%08x-%08x\n", per_b[0], per_b[1], per_b[2]);
-	sha256_loc1(buf, per_a, per_b);
-	printf("sha256_loc1:\n");
-	printf("%08x-%08x-%08x\n", per_a[0], per_a[1], per_a[2]);
-	printf("%08x-%08x-%08x\n", per_b[0], per_b[1], per_b[2]);
+	hex2bin(buf, strbuf, 64);
+	printf("midstate calculation\n");
+	sha256_init(&ctx, NULL);
+	sha256_update(&ctx, buf, 64);
+	for (i = 0; i < 8; i++) {
+		digest[i << 2] = ctx.h[i] & 0xff;
+		digest[(i << 2) + 1] = ctx.h[i] >> 8 & 0xff;
+		digest[(i << 2) + 2] = ctx.h[i] >> 16 & 0xff;
+		digest[(i << 2) + 3] = ctx.h[i] >> 24 & 0xff;
+	}
+	for (i = 0; i < 32; i++)
+		printf("%02x", digest[i]);
+	printf("\n");
+
+	printf("sha256 calculate from midstate\n");
+	sha256_init(&ctx1, ctx.h);
+	sha256_final(&ctx, digest);
+	for (i = 0; i < 32; i++)
+		printf("%02x", digest[i]);
+	printf("\n");
+
+	printf("sha256 calculate from original\n");
+	sha256_init(&ctx, NULL);
+	sha256_update(&ctx, buf, 64);
+	sha256_final(&ctx, digest);
+	for (i = 0; i < 32; i++)
+		printf("%02x", digest[i]);
+	printf("\n");
+
+	return 0;
 }
+
