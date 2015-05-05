@@ -81,6 +81,33 @@ static unsigned char hex2bin(unsigned char *p, const unsigned char *hexstr, unsi
 	return ret;
 }
 
+static void revbuf(unsigned char *buf, uint32_t len)
+{
+	uint8_t tmp;
+	uint32_t i;
+
+	for (i = 0; i < len / 2; i++) {
+		tmp = buf[len - 1 - i];
+		buf[len - 1 - i] = buf[i];
+		buf[i] = tmp;
+	}
+}
+
+static void convendian(unsigned char *buf, uint32_t len)
+{
+	uint32_t tmp;
+	uint32_t i;
+
+	if (len % 4)
+		return;
+
+	for (i = 0; i < len; i+=4) {
+		memcpy(&tmp, buf + i, 4);
+		tmp = (tmp >> 24) | (tmp << 24) | ((tmp >> 8) & 0xff00) | ((tmp << 8) & 0xff0000);
+		memcpy(buf + i, &tmp, 4);
+	}
+}
+
 int main(void)
 {
 	/* header
@@ -92,35 +119,62 @@ int main(void)
 	 * nonce: 5e2199c8
 	 */
 	unsigned char strbuf[] = "030000006fb968b94fe9c2d59682adaca8a9e8e78165a57f76fb08010000000000000000f1cc59cb6626d940b5713f712b70d26c8e3c3860e885969ff8a76ffd";
-	uint8_t buf[64], i;
-	sha256_ctx ctx, ctx1;
+	unsigned char strdat[] = "59fc2dd28b2b3755f01717185e2199c8";
+	unsigned char stricamid[] = "62462b5ee07afe103e86dd9eef330045a12e7215f5fecb6762ac8ad7b9829f8d";
+	unsigned char stricadat[] = "f01717188b2b375559fc2dd25e2199c8";
+	uint8_t buf[64], dat[16];
+	uint8_t ica_mid[32], ica_dat[16];
+	uint32_t temp_h[8], i;
+	sha256_ctx ctx;
 	unsigned char digest[32];
 
+	/* method 1: calculate dsha256 from block header */
 	hex2bin(buf, strbuf, 64);
-	printf("midstate calculation\n");
+	hex2bin(dat, strdat, 16);
+
 	sha256_init(&ctx, NULL);
 	sha256_update(&ctx, buf, 64);
-	for (i = 0; i < 8; i++) {
-		digest[i << 2] = ctx.h[i] & 0xff;
-		digest[(i << 2) + 1] = ctx.h[i] >> 8 & 0xff;
-		digest[(i << 2) + 2] = ctx.h[i] >> 16 & 0xff;
-		digest[(i << 2) + 3] = ctx.h[i] >> 24 & 0xff;
-	}
+
+	printf("init h:");
+	for (i = 0; i < 8; i++)
+		printf("%04x", ctx.h[i]);
+	printf("\n");
+
+	sha256_update(&ctx, dat, 16);
+	sha256_final(&ctx, digest);
+
+	sha256_init(&ctx, NULL);
+	sha256_update(&ctx, digest, 32);
+	sha256_final(&ctx, digest);
+	printf("dbhash:");
 	for (i = 0; i < 32; i++)
 		printf("%02x", digest[i]);
 	printf("\n");
 
-	printf("sha256 calculate from midstate\n");
-	sha256_init(&ctx1, ctx.h);
-	sha256_final(&ctx, digest);
-	for (i = 0; i < 32; i++)
-		printf("%02x", digest[i]);
+	/* method 2: calculate dsha256 from midstate & data (icarus format) */
+	hex2bin(ica_mid, stricamid, 32);
+	hex2bin(ica_dat, stricadat, 16);
+
+	revbuf(ica_mid, 32);
+	revbuf(ica_dat, 12);
+	convendian(ica_dat, 12);
+	for (i = 0; i < 32; i+=4)
+		temp_h[i / 4] = ica_mid[i] | (ica_mid[i + 1] << 8) | (ica_mid[i + 2] << 16) | (ica_mid[i + 3] << 24);
+
+	printf("init h:");
+	for (i = 0; i < 8; i++)
+		printf("%04x", temp_h[i]);
 	printf("\n");
 
-	printf("sha256 calculate from original\n");
-	sha256_init(&ctx, NULL);
-	sha256_update(&ctx, buf, 64);
+	sha256_init(&ctx, temp_h);
+	ctx.tot_len = 64;
+	sha256_update(&ctx, ica_dat, 16);
 	sha256_final(&ctx, digest);
+
+	sha256_init(&ctx, NULL);
+	sha256_update(&ctx, digest, 32);
+	sha256_final(&ctx, digest);
+	printf("dbhash:");
 	for (i = 0; i < 32; i++)
 		printf("%02x", digest[i]);
 	printf("\n");
